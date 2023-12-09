@@ -1,0 +1,1 @@
+WORKERS_FILE = 'test_names.csv'
