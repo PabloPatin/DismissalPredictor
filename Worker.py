@@ -180,6 +180,7 @@ class Mainloop:
     def day_preparing(self):
         for worker in self.workers:
             self.messages.append(worker.send_messages(self.date))
+            print(self.messages)
 
     def __repr__(self):
         return self.date.strftime("%Y-%m-%d")
