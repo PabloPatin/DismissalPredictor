@@ -8,17 +8,22 @@ from test_settings import *
 
 from external_addresses import EXTERNAL_ADDRESSES
 
+Address = str
+
 
 class LetterBase(ABC):
     def __init__(self):
-        self.text = ''
-        self.sender = None
-        self.recipient = None
-        self.copy = None
-        self.hidden_copy = None
-        self.send_datetime = None
-        self.read_datetime = None
-        self.have_answer = False
+        self.text: str = ''
+        self.sender: Address = None
+        self.recipient: Address = None
+        self.copy: list[Address] = None
+        self.hidden_copy: list[Address] = None
+        self.send_datetime: datetime = None
+        self.read_datetime: datetime = None
+        self.have_answer: bool = False
+
+    def __repr__(self):
+        return f'\n{self.send_datetime.isoformat(" ")}\nПисьмо от {self.sender} для {self.recipient}\n{self.text}'
 
     def generate_text(self, length):
         self.text = 'a' * length
@@ -30,10 +35,10 @@ class LetterBase(ABC):
         self.hidden_copy = hidden_copy
 
     def send(self, dt):
-        self.send_datetime = date
+        self.send_datetime = dt
 
     def read(self, dt):
-        self.read_datetime = date
+        self.read_datetime = dt
 
     def answer(self):
         self.have_answer = True
@@ -58,8 +63,8 @@ class Params:
         ask_letter_chance - вероятность того, что письмо вопросительное (иначе обычное)
         other_letter_chance - вероятность того, что письмо послано на внешний адрес
 
-        avg_letter_len - среднее количество символов в письме
-        avg_letter_len_deviation - стандартное отклонение от среднего количества символов в письме
+        avg_message_len - среднее количество символов в письме
+        avg_message_len_deviation - стандартное отклонение от среднего количества символов в письме
 
     Для ответов на письма:
         answer_plain_letter_chance - вероятность ответа на обычное письмо
@@ -77,8 +82,8 @@ class Params:
         self.other_letter_chance = 20 / 100
         self.answer_plain_letter_chance = 30 / 100
         self.answer_ask_letter_chance = 80 / 100
-        self.avg_letter_len = 40
-        self.avg_letter_len_deviation = 15
+        self.avg_message_len = 80
+        self.avg_message_len_deviation = 50
 
         self.work_day_start = self.__time_to_sec(WORK_DAY_START)
         self.work_day_end = self.__time_to_sec(WORK_DAY_END)
@@ -89,7 +94,7 @@ class Params:
 
 class Worker:
     """Класс Worker иммитирует поведение сотрудника"""
-    workers = []
+    workers: list['Worker'] = []
 
     def __new__(cls, *args, **kwargs):
         worker = super(Worker, cls).__new__(cls)
@@ -107,12 +112,23 @@ class Worker:
     def __repr__(self):
         return f'{self.name}, {self.mail}'
 
+    @staticmethod
+    def _check_chance(chance):
+        return random() < chance
+
     def _randomize_message_count(self):
         message_count = gauss(self.params.avg_send_messages, self.params.avg_messages_deviation)
         if message_count < 0:
             return 0
         else:
             return round(message_count)
+
+    def _randomize_message_length(self):
+        message_len = gauss(self.params.avg_message_len, self.params.avg_message_len_deviation)
+        if message_len < MIN_MESSAGE_LEN:
+            return MIN_MESSAGE_LEN
+        else:
+            return round(message_len)
 
     def _randomise_send_time(self, deviation_modifier):
         send_time = int(gauss(self.params.work_day_middle, self.params.send_deviation * deviation_modifier)) % (
@@ -121,18 +137,19 @@ class Worker:
         return send_time
 
     def _generate_letter(self, current_date) -> LetterBase:
-        is_ask = random()
-        if is_ask < self.params.ask_letter_chance:
+        if self._check_chance(self.params.ask_letter_chance):
             letter = AskLetter()
         else:
             letter = PlainLetter()
-        is_other = random()
-        if is_other < self.params.other_letter_chance:
+
+        if self._check_chance(self.params.other_letter_chance):
             addres = choice(EXTERNAL_ADDRESSES)
         else:
-            addres = choice(self.workers)
+            addres = choice(self.workers).mail
+
         letter_time = datetime.combine(time=self._randomise_send_time(DEVIATION_MODIFIER), date=current_date)
         letter.set_info(sender=self.mail, recipient=addres)
+        letter.generate_text(self._randomize_message_length())
         letter.send(letter_time)
         return letter
 
@@ -143,6 +160,7 @@ class Worker:
         for msg in range(message_count):
             letter = self._generate_letter(current_date)
             letters.append(letter)
+        print(letters)
         return letters
 
 
@@ -179,8 +197,7 @@ class Mainloop:
     # Подготовка к ежедневному циклу событий
     def day_preparing(self):
         for worker in self.workers:
-            self.messages.append(worker.send_messages(self.date))
-            print(self.messages)
+            self.messages += (worker.send_messages(self.date))
 
     def __repr__(self):
         return self.date.strftime("%Y-%m-%d")
