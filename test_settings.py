@@ -1,2 +1,2 @@
-WORKERS_FILE = 'test_names.csv'
+WORKERS_FILE = 'workers.csv'
 DEVIATION_MODIFIER = 0.6
