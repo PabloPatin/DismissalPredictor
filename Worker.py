@@ -9,23 +9,24 @@ from test_settings import *
 
 class Params:
     """Параметры отвечают за вероятности отправки писем и интенсивность взаимодействия сотрудника с почтой.
-    Все вероятности обозначаются в процентах.
-    Вероятности перемножаются, тоесть если сотрудник отправил первое письмо с вероятностью p, то второе он отправит с вероятностью p**2
 
-    send_plain_letter_corp - вероятность отправки обычного письма другому сотруднику
-    send_plain_letter_other - вероятность отправки обычного письма другому сотруднику
-    extra_day_chance_corp - вероятность дня усиленной переписки внутри компании у сотрудника
-    extra_day_chance_other - вероятность дня усиленной переписки вне компании у сотрудника
-    extra_day_modifier - на сколько процентов повышается вероятность отправки
+    Для отправки писем по собственной инициативе:
+        avg_messages - среднее количество отправляемых сотрудником писем
+        avg_messages_deviations - стандартное отклонение от среднего количества отправляемых сотрудником писем
+        ask_letter_chance - вероятность того, что письмо вопросительное (иначе обычное)
+        other_letter_chance - вероятность того, что письмо послано на внешний адрес
+
+    Для ответов на письма:
+        answer_plain_letter_chance - вероятность ответа на обычное письмо
+        answer_ask_letter_chance - вероятность ответить на письмо с вопросом
     """
 
     def __init__(self):
-        # вероятность отправки
-        self.send_plain_letter_corp = randint(40, 50)
-        self.send_plain_letter_other = randint(20, 40)
-        self.extra_day_chance_corp = 3
-        self.extra_day_chance_other = 5
-        self.extra_day_modifier = randint(200, 300)
+        self.avg_send_messages = 4
+        self.ask_letter_chance = 60/100
+        self.other_letter_chance = 20/100
+        self.answer_plain_letter_chance = 30/100
+        self.answer_ask_letter_chance = 80/100
 
 
 class Worker:
@@ -40,13 +41,8 @@ class Worker:
     def __repr__(self):
         return f'{self.name}, {self.mail}'
 
-    @staticmethod
-    def count_random(percent, modifier):
-        for i in range(100):
-            ...
-
     def send_messages(self):
-        ...
+        message_count = gauss(self.params)
 
 
 
@@ -138,8 +134,8 @@ class Mainloop:
     def __time_to_sec(t: time):
         return t.hour * 3600 + t.minute * 60 + t.second
 
-    def randomise_send_time(self):
-        send_time = int(gauss(self.work_day_middle, self.send_deviation)) % (3600 * 24)
+    def randomise_send_time(self, deviation_modifier):
+        send_time = int(gauss(self.work_day_middle, self.send_deviation*deviation_modifier)) % (3600 * 24)
         send_time = time(hour=send_time // 3600, minute=send_time % 3600 // 60)
         return send_time
 
@@ -158,12 +154,7 @@ if __name__ == '__main__':
         for row in csv.DictReader(file):
             workers.append(Worker(**row))
 
-    loop = Mainloop(workers=workers[:5], start_date=date(day=1, month=1, year=2015),
+    loop = Mainloop(workers=workers[:2], start_date=date(day=1, month=1, year=2015),
                     end_date=date(day=1, month=2, year=2015))
-    # loop = Mainloop(start_date=date(day=1, month=1, year=2015),
-    #                 end_date=date(day=1, month=2, year=2015))
 
     loop.start_loop()
-
-    for i in range(100):
-        print(loop.randomise_send_time())
