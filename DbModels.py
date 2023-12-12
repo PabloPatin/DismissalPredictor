@@ -1,8 +1,8 @@
 from sqlalchemy import create_engine, Column, Integer, ARRAY, VARCHAR, ForeignKey, TIMESTAMP, Text, Boolean, inspect, \
     select
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-engine = create_engine('postgresql://postgres:password@localhost:5432/db', client_encoding='utf8')
+engine = create_engine('postgresql://postgres:241219939Ps@localhost:5432/db', client_encoding='utf8')
 
 session = sessionmaker(bind=engine)()
 
@@ -24,6 +24,8 @@ class Employee(BaseModel):
     name = Column(VARCHAR(255), nullable=False)
     position = Column(VARCHAR(255), nullable=False)
     email = Column(VARCHAR(255), unique=True, nullable=False)
+    department = Column(VARCHAR(255), nullable=True)
+    is_dismissed = Column(Boolean, default=False)
 
     @staticmethod
     def get_all_employee():
@@ -31,9 +33,9 @@ class Employee(BaseModel):
 
     # TODO: продумать реализацию и доделать методы
     @staticmethod
-    def add_employee(name_or_employee, position='', email=''):
+    def add_employee(name_or_employee, position='', email='', department=''):
         employee = name_or_employee if isinstance(name_or_employee, Employee) \
-            else Employee(name_or_employee, position, email)
+            else Employee(name=name_or_employee, position=position, email=email, department=department)
         try:
             session.add(employee)
             session.commit()
@@ -43,11 +45,11 @@ class Employee(BaseModel):
 
     @staticmethod
     def get_employee_by_id(id):
-        return session.query(Employee).get(id)
+        return session.query(Employee).filter_by(id=id)
 
     @staticmethod
     def get_employee_by_email(email):
-        return session.query(Employee).filter_by(email=email).first()
+        return session.query(Employee).filter_by(email=email)
 
 
 class Dismissal(BaseModel):
@@ -68,13 +70,14 @@ class Message(BaseModel):
     copy = Column(ARRAY(Text), nullable=True)
     hidden_copy = Column(ARRAY(Text), nullable=True)
     read_time = Column(TIMESTAMP, nullable=True)
-    have_answer = Column(Boolean)
+    is_answer = Column(Boolean)
 
 
-def main():
+def reinitialize_tables():
+    Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
 
 
 if __name__ == '__main__':
-    main()
-
+    reinitialize_tables()
+    session.close()
