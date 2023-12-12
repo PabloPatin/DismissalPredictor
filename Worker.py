@@ -20,28 +20,29 @@ class LetterBase(ABC):
         self.hidden_copy: list[Address] = None
         self.send_datetime: datetime = None
         self.read_datetime: datetime = None
-        self.have_answer: bool = False
+        self.is_answer: bool = False
 
     def __repr__(self):
-        return f'\n{self.send_datetime.isoformat(" ")}\nПисьмо от {self.sender} для {self.recipient}\n{self.text}'
+        if self.is_answer:
+            return f'\n{self.send_datetime.isoformat(" ")}\nПисьмо от {self.sender}, ответ для {self.recipient}\n{self.text}'
+        else:
+            return f'\n{self.send_datetime.isoformat(" ")}\nПисьмо от {self.sender} для {self.recipient}\n{self.text}'
 
     def generate_text(self, length):
         self.text = 'a' * length
 
-    def set_info(self, sender, recipient, copy=None, hidden_copy=None):
+    def set_info(self, sender, recipient, copy=None, hidden_copy=None, is_answer=False):
         self.sender = sender
         self.recipient = recipient
         self.copy = copy
         self.hidden_copy = hidden_copy
+        self.is_answer = is_answer
 
     def send(self, dt):
         self.send_datetime = dt
 
     def read(self, dt):
         self.read_datetime = dt
-
-    def answer(self):
-        self.have_answer = True
 
 
 class PlainLetter(LetterBase):
@@ -92,6 +93,22 @@ class Params:
         self.work_day_middle = self.work_day_start + self.work_period // 2
 
 
+class Mailbox:
+    """Класс почтового ящика - помогает сортировать письма"""
+
+    def __init__(self, address):
+        self.address = address
+        self.outgoing = []
+        self.incoming = []
+
+    def __repr__(self):
+        return self.address
+
+    def unwatched(self) -> list[LetterBase]:
+        res = list(filter(lambda x: x.read_datetime is None, self.incoming))
+        return res
+
+
 class Worker:
     """Класс Worker иммитирует поведение сотрудника"""
     workers: list['Worker'] = []
@@ -103,14 +120,12 @@ class Worker:
 
     def __init__(self, full_name: str, mailbox: str, params: Params = None):
         self.name = full_name
-        self.mail = mailbox
         self.happiness_rate = 0
-        self.incoming_messages = []
-        self.outgoing_messages = []
+        self.mailbox = Mailbox(mailbox)
         self.params = params if params else Params()
 
     def __repr__(self):
-        return f'{self.name}, {self.mail}'
+        return f'{self.name} - {self.mailbox}'
 
     @staticmethod
     def _check_chance(chance):
@@ -136,7 +151,7 @@ class Worker:
         send_time = time(hour=send_time // 3600, minute=send_time % 3600 // 60)
         return send_time
 
-    def _generate_letter(self, current_date) -> LetterBase:
+    def _generate_letter(self, current_date, is_answer=False) -> LetterBase:
         if self._check_chance(self.params.ask_letter_chance):
             letter = AskLetter()
         else:
@@ -145,10 +160,10 @@ class Worker:
         if self._check_chance(self.params.other_letter_chance):
             addres = choice(EXTERNAL_ADDRESSES)
         else:
-            addres = choice(self.workers).mail
+            addres = choice(self.workers).mailbox.address
 
         letter_time = datetime.combine(time=self._randomise_send_time(DEVIATION_MODIFIER), date=current_date)
-        letter.set_info(sender=self.mail, recipient=addres)
+        letter.set_info(sender=self.mailbox.address, recipient=addres, is_answer=is_answer)
         letter.generate_text(self._randomize_message_length())
         letter.send(letter_time)
         return letter
@@ -160,8 +175,34 @@ class Worker:
         for msg in range(message_count):
             letter = self._generate_letter(current_date)
             letters.append(letter)
-        print(letters)
         return letters
+
+    def answer_message(self, message: LetterBase, current_date: date) -> LetterBase | False:
+        if message.is_answer:
+            chance = self.params.answer_ask_letter_chance
+        else:
+            chance = self.params.answer_plain_letter_chance
+        if self._check_chance(chance):
+            letter = self._generate_letter(current_date, is_answer=True)
+            return letter
+        else:
+            return False
+
+
+class DayLoop:
+    def __init__(self, date: date, workers: list[Worker]):
+        self.date = date
+        self.workers = workers
+        self.daily_messages: list[LetterBase] = []
+
+    def day_preparing(self):
+        for worker in self.workers:
+            self.daily_messages += worker.send_messages(self.date)
+        self.daily_messages.sort(key=lambda letter: letter.send_datetime)
+
+    def start_day(self):
+        for message in self.daily_messages:
+            print(message)
 
 
 class Mainloop:
@@ -178,6 +219,7 @@ class Mainloop:
 
         # Инициализация сообщений
         self.messages = []
+        self.daily_messages = []
 
     def __next__(self):
         if self.date < self.end_date:
@@ -191,13 +233,10 @@ class Mainloop:
 
     def start_loop(self):
         for day in self:
-            day.day_preparing()
+            new_day = DayLoop(day.date, self.workers)
+            new_day.day_preparing()
+            new_day.start_day()
             ...
-
-    # Подготовка к ежедневному циклу событий
-    def day_preparing(self):
-        for worker in self.workers:
-            self.messages += (worker.send_messages(self.date))
 
     def __repr__(self):
         return self.date.strftime("%Y-%m-%d")
@@ -217,7 +256,9 @@ if __name__ == '__main__':
         for row in csv.DictReader(file):
             workers.append(Worker(**row))
 
-    loop = Mainloop(workers=workers[:2], start_date=date(day=1, month=1, year=2015),
+    print(workers[:2])
+
+    loop = Mainloop(workers=workers[:3], start_date=date(day=1, month=1, year=2015),
                     end_date=date(day=1, month=2, year=2015))
 
     loop.start_loop()
